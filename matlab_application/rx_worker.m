@@ -1,14 +1,11 @@
-function rx_worker(s)
-
+function rx_worker(queue_to_worker, queue_to_gui)
     while true
-        pause(0.02); % 20 ms
-        if s.NumBytesAvailable > 0
-            data = read(s, s.NumBytesAvailable, 'uint8');
-            % Parsuj MAVLink, zapisz dane do DataQueue
-            buffer = uint8(data);
-                
-            bytes_per_sec = length(buffer) / 0.02;
-            disp(bytes_per_sec)
-        end
+        data = poll(queue_to_worker, inf); 
+        
+        % Utwórz opis typu i rozmiaru
+        text = sprintf("Type: %s, Size: [%s]", ...
+            class(data), num2str(size(data)));
+    
+        send(queue_to_gui, text);
     end
 end

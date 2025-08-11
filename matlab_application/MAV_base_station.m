@@ -38,7 +38,6 @@ while true
         buffer = uint8(data);
         
         [msg, status] = deserializemsg(dialect, buffer);
-        bytes
         for m = 1:numel(msg)
             disp(status)
             if status(m) == 0
@@ -76,3 +75,10 @@ pause(10);
     
 stop(readTimer)
 delete(readTimer)
+
+%%
+f = parfeval(@rx_worker, 0, s)  % 0 output arguments
+disp('connected')
+%%
+disp('disconnecting')
+cancel(f);

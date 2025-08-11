@@ -39,7 +39,7 @@ while true
     hbMsg.ComponentID = uint8(1); % nc
    
     buffer = serializemsg(mavlink, dbgMsg);
-    % write(s, buffer, "uint8");
+    write(s, buffer, "uint8");
 
     disp("Sent HEARTBEAT and DEBUG_FRAME");
     pause(1);
