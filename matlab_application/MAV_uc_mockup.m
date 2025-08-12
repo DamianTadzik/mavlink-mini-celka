@@ -1,6 +1,6 @@
 % MAV_uc_mockup.m
 clear; clc;
-dialect = mavlinkdialect("mavmc.xml")
+dialect = mavlinkdialect("mavmc.xml", 1)
 mavlink = mavlinkio(dialect)
 
 portName = 'COM18';
@@ -14,6 +14,7 @@ mytext = "Test 123! ten tekst ma na pewno wiecej niz mozna miec";
 
 %% Infinite loop
 while true
+    buffers_length = 0;
     % HEARTBEAT
     hbMsg = createmsg(dialect, "HEARTBEAT");
     hbMsg.Payload.type = uint8(0);              % nc MAV_TYPE_GENERIC - 0
@@ -27,6 +28,7 @@ while true
     hbMsg.ComponentID = uint8(1); % nc
 
     buffer = serializemsg(mavlink, hbMsg);
+    buffers_length = buffers_length + length(buffer);
     write(s, buffer, "uint8");
 
     % DEBUG_FRAME
@@ -35,13 +37,14 @@ while true
     temp = [char(mytext) char(0)];
     dbgMsg.Payload.text = temp(1:min(length(temp),50));
 
-    hbMsg.SystemID = uint8(1);    % nc
-    hbMsg.ComponentID = uint8(1); % nc
+    dbgMsg.SystemID = uint8(1);    % nc
+    dbgMsg.ComponentID = uint8(1); % nc
    
     buffer = serializemsg(mavlink, dbgMsg);
+    buffers_length = buffers_length + length(buffer);
     write(s, buffer, "uint8");
 
-    disp("Sent HEARTBEAT and DEBUG_FRAME");
+    disp(['Sent HEARTBEAT and DEBUG_FRAME total ' num2str(buffers_length) ' bytes']);
     pause(1);
 end
 

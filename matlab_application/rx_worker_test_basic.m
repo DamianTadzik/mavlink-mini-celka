@@ -1,8 +1,8 @@
 clc
 clear
-poolobj = gcp('nocreate') % sprawdź czy jest aktywna pula
-if ~isempty(poolobj)
-    delete(poolobj) % usuń ją
+
+if ~isempty(gcp('nocreate'))
+    delete(poolobj)
 end
 
 pool = parpool('Threads',1); % teraz stwórz nową pulę
