@@ -72,6 +72,13 @@ S15:MAX_WINDOW=131
 2. Run following command ```python venv/Scripts/mavgen.py --lang=C --wire-protocol=1.0 --output=generated mavmc.xml```
 3. To exit venv ```deactivate```
 
+### MEX function
+- It is written to deserialize data into messages, and it is compiled from its source code ```mavmv_deserializer_mex.c``` and from ```generated/``` directory.
+- Compiled using ```mex mavmc_deserializer_mex.c```
+- MEGA DUŻO ESSY!
+- It is meant to be used by a rx_worker Process to decode the bytestream into messages. The worker is also responsible for decoding the incoming can messages.
+- WIECEJ CZAAAADUUU!!
+- Decoding is done by ANOTHER MEX FUNCTION generated from DBC file, in another REPO. XD
 
 ## Useful resources:
 - [SiK Radio Configuration](https://ardupilot.org/copter/docs/common-3dr-radio-advanced-configuration-and-technical-information.html?utm_source=chatgpt.com)

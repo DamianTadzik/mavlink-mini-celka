@@ -5,13 +5,13 @@
 
 
 typedef struct __mavlink_radio_status_t {
- uint16_t rxerrors; /*<  Receive errors*/
- uint16_t fixed; /*<  Count of error-corrected packets*/
- uint8_t rssi; /*<  Local signal strength*/
- uint8_t remrssi; /*<  Remote signal strength*/
- uint8_t txbuf; /*<  Remaining free buffer space [%]*/
- uint8_t noise; /*<  Local noise level*/
- uint8_t remnoise; /*<  Remote noise level*/
+ uint16_t rxerrors; /*<  Count of radio packet receive errors (since boot).*/
+ uint16_t fixed; /*<  Count of error corrected radio packets (since boot).*/
+ uint8_t rssi; /*<  Local (message sender) received signal strength indication in device-dependent units/scale. Values: [0-254], UINT8_MAX: invalid/unknown.*/
+ uint8_t remrssi; /*<  Remote (message receiver) signal strength indication in device-dependent units/scale. Values: [0-254], UINT8_MAX: invalid/unknown.*/
+ uint8_t txbuf; /*< [%] Remaining free transmitter buffer space.*/
+ uint8_t noise; /*<  Local background noise level. These are device dependent RSSI values (scale as approx 2x dB on SiK radios). Values: [0-254], UINT8_MAX: invalid/unknown.*/
+ uint8_t remnoise; /*<  Remote background noise level. These are device dependent RSSI values (scale as approx 2x dB on SiK radios). Values: [0-254], UINT8_MAX: invalid/unknown.*/
 } mavlink_radio_status_t;
 
 #define MAVLINK_MSG_ID_RADIO_STATUS_LEN 9
@@ -59,13 +59,13 @@ typedef struct __mavlink_radio_status_t {
  * @param component_id ID of this component (e.g. 200 for IMU)
  * @param msg The MAVLink message to compress the data into
  *
- * @param rssi  Local signal strength
- * @param remrssi  Remote signal strength
- * @param txbuf  Remaining free buffer space [%]
- * @param noise  Local noise level
- * @param remnoise  Remote noise level
- * @param rxerrors  Receive errors
- * @param fixed  Count of error-corrected packets
+ * @param rssi  Local (message sender) received signal strength indication in device-dependent units/scale. Values: [0-254], UINT8_MAX: invalid/unknown.
+ * @param remrssi  Remote (message receiver) signal strength indication in device-dependent units/scale. Values: [0-254], UINT8_MAX: invalid/unknown.
+ * @param txbuf [%] Remaining free transmitter buffer space.
+ * @param noise  Local background noise level. These are device dependent RSSI values (scale as approx 2x dB on SiK radios). Values: [0-254], UINT8_MAX: invalid/unknown.
+ * @param remnoise  Remote background noise level. These are device dependent RSSI values (scale as approx 2x dB on SiK radios). Values: [0-254], UINT8_MAX: invalid/unknown.
+ * @param rxerrors  Count of radio packet receive errors (since boot).
+ * @param fixed  Count of error corrected radio packets (since boot).
  * @return length of the message in bytes (excluding serial stream start sign)
  */
 static inline uint16_t mavlink_msg_radio_status_pack(uint8_t system_id, uint8_t component_id, mavlink_message_t* msg,
@@ -106,13 +106,13 @@ static inline uint16_t mavlink_msg_radio_status_pack(uint8_t system_id, uint8_t 
  * @param status MAVLink status structure
  * @param msg The MAVLink message to compress the data into
  *
- * @param rssi  Local signal strength
- * @param remrssi  Remote signal strength
- * @param txbuf  Remaining free buffer space [%]
- * @param noise  Local noise level
- * @param remnoise  Remote noise level
- * @param rxerrors  Receive errors
- * @param fixed  Count of error-corrected packets
+ * @param rssi  Local (message sender) received signal strength indication in device-dependent units/scale. Values: [0-254], UINT8_MAX: invalid/unknown.
+ * @param remrssi  Remote (message receiver) signal strength indication in device-dependent units/scale. Values: [0-254], UINT8_MAX: invalid/unknown.
+ * @param txbuf [%] Remaining free transmitter buffer space.
+ * @param noise  Local background noise level. These are device dependent RSSI values (scale as approx 2x dB on SiK radios). Values: [0-254], UINT8_MAX: invalid/unknown.
+ * @param remnoise  Remote background noise level. These are device dependent RSSI values (scale as approx 2x dB on SiK radios). Values: [0-254], UINT8_MAX: invalid/unknown.
+ * @param rxerrors  Count of radio packet receive errors (since boot).
+ * @param fixed  Count of error corrected radio packets (since boot).
  * @return length of the message in bytes (excluding serial stream start sign)
  */
 static inline uint16_t mavlink_msg_radio_status_pack_status(uint8_t system_id, uint8_t component_id, mavlink_status_t *_status, mavlink_message_t* msg,
@@ -156,13 +156,13 @@ static inline uint16_t mavlink_msg_radio_status_pack_status(uint8_t system_id, u
  * @param component_id ID of this component (e.g. 200 for IMU)
  * @param chan The MAVLink channel this message will be sent over
  * @param msg The MAVLink message to compress the data into
- * @param rssi  Local signal strength
- * @param remrssi  Remote signal strength
- * @param txbuf  Remaining free buffer space [%]
- * @param noise  Local noise level
- * @param remnoise  Remote noise level
- * @param rxerrors  Receive errors
- * @param fixed  Count of error-corrected packets
+ * @param rssi  Local (message sender) received signal strength indication in device-dependent units/scale. Values: [0-254], UINT8_MAX: invalid/unknown.
+ * @param remrssi  Remote (message receiver) signal strength indication in device-dependent units/scale. Values: [0-254], UINT8_MAX: invalid/unknown.
+ * @param txbuf [%] Remaining free transmitter buffer space.
+ * @param noise  Local background noise level. These are device dependent RSSI values (scale as approx 2x dB on SiK radios). Values: [0-254], UINT8_MAX: invalid/unknown.
+ * @param remnoise  Remote background noise level. These are device dependent RSSI values (scale as approx 2x dB on SiK radios). Values: [0-254], UINT8_MAX: invalid/unknown.
+ * @param rxerrors  Count of radio packet receive errors (since boot).
+ * @param fixed  Count of error corrected radio packets (since boot).
  * @return length of the message in bytes (excluding serial stream start sign)
  */
 static inline uint16_t mavlink_msg_radio_status_pack_chan(uint8_t system_id, uint8_t component_id, uint8_t chan,
@@ -242,13 +242,13 @@ static inline uint16_t mavlink_msg_radio_status_encode_status(uint8_t system_id,
  * @brief Send a radio_status message
  * @param chan MAVLink channel to send the message
  *
- * @param rssi  Local signal strength
- * @param remrssi  Remote signal strength
- * @param txbuf  Remaining free buffer space [%]
- * @param noise  Local noise level
- * @param remnoise  Remote noise level
- * @param rxerrors  Receive errors
- * @param fixed  Count of error-corrected packets
+ * @param rssi  Local (message sender) received signal strength indication in device-dependent units/scale. Values: [0-254], UINT8_MAX: invalid/unknown.
+ * @param remrssi  Remote (message receiver) signal strength indication in device-dependent units/scale. Values: [0-254], UINT8_MAX: invalid/unknown.
+ * @param txbuf [%] Remaining free transmitter buffer space.
+ * @param noise  Local background noise level. These are device dependent RSSI values (scale as approx 2x dB on SiK radios). Values: [0-254], UINT8_MAX: invalid/unknown.
+ * @param remnoise  Remote background noise level. These are device dependent RSSI values (scale as approx 2x dB on SiK radios). Values: [0-254], UINT8_MAX: invalid/unknown.
+ * @param rxerrors  Count of radio packet receive errors (since boot).
+ * @param fixed  Count of error corrected radio packets (since boot).
  */
 #ifdef MAVLINK_USE_CONVENIENCE_FUNCTIONS
 
@@ -337,7 +337,7 @@ static inline void mavlink_msg_radio_status_send_buf(mavlink_message_t *msgbuf, 
 /**
  * @brief Get field rssi from radio_status message
  *
- * @return  Local signal strength
+ * @return  Local (message sender) received signal strength indication in device-dependent units/scale. Values: [0-254], UINT8_MAX: invalid/unknown.
  */
 static inline uint8_t mavlink_msg_radio_status_get_rssi(const mavlink_message_t* msg)
 {
@@ -347,7 +347,7 @@ static inline uint8_t mavlink_msg_radio_status_get_rssi(const mavlink_message_t*
 /**
  * @brief Get field remrssi from radio_status message
  *
- * @return  Remote signal strength
+ * @return  Remote (message receiver) signal strength indication in device-dependent units/scale. Values: [0-254], UINT8_MAX: invalid/unknown.
  */
 static inline uint8_t mavlink_msg_radio_status_get_remrssi(const mavlink_message_t* msg)
 {
@@ -357,7 +357,7 @@ static inline uint8_t mavlink_msg_radio_status_get_remrssi(const mavlink_message
 /**
  * @brief Get field txbuf from radio_status message
  *
- * @return  Remaining free buffer space [%]
+ * @return [%] Remaining free transmitter buffer space.
  */
 static inline uint8_t mavlink_msg_radio_status_get_txbuf(const mavlink_message_t* msg)
 {
@@ -367,7 +367,7 @@ static inline uint8_t mavlink_msg_radio_status_get_txbuf(const mavlink_message_t
 /**
  * @brief Get field noise from radio_status message
  *
- * @return  Local noise level
+ * @return  Local background noise level. These are device dependent RSSI values (scale as approx 2x dB on SiK radios). Values: [0-254], UINT8_MAX: invalid/unknown.
  */
 static inline uint8_t mavlink_msg_radio_status_get_noise(const mavlink_message_t* msg)
 {
@@ -377,7 +377,7 @@ static inline uint8_t mavlink_msg_radio_status_get_noise(const mavlink_message_t
 /**
  * @brief Get field remnoise from radio_status message
  *
- * @return  Remote noise level
+ * @return  Remote background noise level. These are device dependent RSSI values (scale as approx 2x dB on SiK radios). Values: [0-254], UINT8_MAX: invalid/unknown.
  */
 static inline uint8_t mavlink_msg_radio_status_get_remnoise(const mavlink_message_t* msg)
 {
@@ -387,7 +387,7 @@ static inline uint8_t mavlink_msg_radio_status_get_remnoise(const mavlink_messag
 /**
  * @brief Get field rxerrors from radio_status message
  *
- * @return  Receive errors
+ * @return  Count of radio packet receive errors (since boot).
  */
 static inline uint16_t mavlink_msg_radio_status_get_rxerrors(const mavlink_message_t* msg)
 {
@@ -397,7 +397,7 @@ static inline uint16_t mavlink_msg_radio_status_get_rxerrors(const mavlink_messa
 /**
  * @brief Get field fixed from radio_status message
  *
- * @return  Count of error-corrected packets
+ * @return  Count of error corrected radio packets (since boot).
  */
 static inline uint16_t mavlink_msg_radio_status_get_fixed(const mavlink_message_t* msg)
 {

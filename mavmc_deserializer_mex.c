@@ -24,6 +24,20 @@ static mxArray* mx_uint8_row(const uint8_t* data, mwSize n) {
     return a;
 }
 
+// Tworzy MATLAB-owy string z bufora char[N]; ucina przy pierwszym '\0'
+static mxArray* mx_string_from_cbuf(const char* buf, mwSize n) {
+    mwSize len = 0;
+    while (len < n && buf[len] != '\0') ++len;
+    // jeśli brak NUL-a i chcesz cały bufor, len = n;
+    // my trzymamy się "do NUL albo do końca"
+    char tmp[256];
+    if (len >= sizeof(tmp)) len = sizeof(tmp) - 1;
+    memcpy(tmp, buf, len);
+    tmp[len] = '\0';
+    return mxCreateString(tmp);
+}
+
+
 // --- Fallback: struktura "generic" dla nieobsługiwanych msgid ---
 static mxArray* make_generic_msg_struct(const mavlink_message_t* msg) {
     const char* fn[] = {"name","msgid","seq","sysid","compid","len","payload_raw"};
@@ -93,25 +107,50 @@ static mxArray* make_radio_status_struct(const mavlink_message_t* msg) {
     return s;
 }
 
-/*
- // --- PRZYKŁAD: Twoje własne wiadomości (odkomentuj, uzupełnij pola)
- // DEBUG_FRAME (jeśli znasz pola)
- static mxArray* make_debug_frame_struct(const mavlink_message_t* msg) {
-     mavlink_debug_frame_t d;
-     mavlink_msg_debug_frame_decode(msg,&d);
-     const char* fn[] = {"name","msgid","seq","sysid","compid","...twoje pola..."};
-     mxArray* s = mxCreateStructMatrix(1,1,/*N*//*,"fn");
-     // mxSetField(...);  // wypełnij wg generated struct
-     return s;
- }
+// --- GENERIC_CAN_FRAME (id=200) ---
+static mxArray* make_generic_can_frame_struct(const mavlink_message_t* msg) {
+    mavlink_generic_can_frame_t f;
+    mavlink_msg_generic_can_frame_decode(msg, &f);
 
- // GENERIC_CAN_FRAME
- static mxArray* make_generic_can_frame_struct(const mavlink_message_t* msg) {
-     mavlink_generic_can_frame_t c;
-     mavlink_msg_generic_can_frame_decode(msg,&c);
-     // Wypisz faktyczne pola z wygenerowanego nagłówka
- }
-*/
+    const char* fn[] = {
+        "name","msgid","seq","sysid","compid",
+        "timestamp","id","data"
+    };
+    mxArray* s = mxCreateStructMatrix(1,1,8,fn);
+
+    mxSetField(s,0,"name",      mxCreateString("GENERIC_CAN_FRAME"));
+    mxSetField(s,0,"msgid",     mx_scalar_double((double)msg->msgid));
+    mxSetField(s,0,"seq",       mx_scalar_double((double)msg->seq));
+    mxSetField(s,0,"sysid",     mx_scalar_double((double)msg->sysid));
+    mxSetField(s,0,"compid",    mx_scalar_double((double)msg->compid));
+
+    mxSetField(s,0,"timestamp", mx_scalar_double((double)f.timestamp)); // uint32
+    mxSetField(s,0,"id",        mx_scalar_double((double)f.id));        // uint16
+    mxSetField(s,0,"data",      mx_uint8_row(f.data, 8));               // uint8[8]
+    return s;
+}
+
+// --- DEBUG_FRAME (id=201) ---
+static mxArray* make_debug_frame_struct(const mavlink_message_t* msg) {
+    mavlink_debug_frame_t d;
+    mavlink_msg_debug_frame_decode(msg, &d);
+
+    const char* fn[] = {
+        "name","msgid","seq","sysid","compid",
+        "status","text"
+    };
+    mxArray* s = mxCreateStructMatrix(1,1,7,fn);
+
+    mxSetField(s,0,"name",    mxCreateString("DEBUG_FRAME"));
+    mxSetField(s,0,"msgid",   mx_scalar_double((double)msg->msgid));
+    mxSetField(s,0,"seq",     mx_scalar_double((double)msg->seq));
+    mxSetField(s,0,"sysid",   mx_scalar_double((double)msg->sysid));
+    mxSetField(s,0,"compid",  mx_scalar_double((double)msg->compid));
+
+    mxSetField(s,0,"status",  mx_scalar_double((double)d.status));      // uint8
+    mxSetField(s,0,"text",    mx_string_from_cbuf(d.text, 50));         // char[50]
+    return s;
+}
 
 // --- Parser state utrzymywany między wywołaniami ---
 static mavlink_status_t g_status;
@@ -124,6 +163,36 @@ static void parser_reset(void) {
     memset(&g_msg, 0, sizeof(g_msg));
 }
 
+// Sprawdza czy prhs jest tekstem równym expected ("reset"), działa dla char i string
+static int is_cmd_equal(const mxArray* a, const char* expected) {
+    if (a == NULL || expected == NULL) return 0;
+
+    // Przypadek: char array
+    if (mxIsChar(a)) {
+        char buf[32] = {0};
+        if (mxGetString(a, buf, sizeof(buf)) == 0) {
+            return (strcmp(buf, expected) == 0);
+        }
+        return 0;
+    }
+
+    // Przypadek: string (klasa "string")
+    if (mxIsClass(a, "string")) {
+        mxArray* tmp = NULL;
+        mxArray* rhs[1] = {(mxArray*)a};
+        // zamiana string -> char przez wywołanie funkcji 'char'
+        if (mexCallMATLAB(1, &tmp, 1, rhs, "char") == 0 && tmp) {
+            char buf[32] = {0};
+            int ok = (mxGetString(tmp, buf, sizeof(buf)) == 0) && (strcmp(buf, expected) == 0);
+            mxDestroyArray(tmp);
+            return ok;
+        }
+        return 0;
+    }
+
+    return 0;
+}
+
 // --- Wejściowy bufor bajtów -> cell z komunikatami ---
 void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 {
@@ -132,27 +201,28 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
         g_initialized = 1;
     }
 
+    // Brak argumentów — nie jest błędem; zwróć [] (np. ping)
     if (nrhs < 1) {
-        mexErrMsgIdAndTxt("mavmc_deserializer_mex:args",
-                          "Podaj co najmniej jeden argument: uint8 wektor bajtów lub 'reset'.");
+        if (nlhs > 0) plhs[0] = mxCreateDoubleMatrix(0,0,mxREAL);
+        return;
     }
 
-    // Obsługa "reset"
-    if (mxIsChar(prhs[0])) {
-        char cmd[16] = {0};
-        if (mxGetString(prhs[0], cmd, sizeof(cmd)) == 0 && strcmp(cmd,"reset")==0) {
+    // Obsługa komend tekstowych: działa dla 'reset' (char) i "reset" (string)
+    if (mxIsChar(prhs[0]) || mxIsClass(prhs[0], "string")) {
+        if (is_cmd_equal(prhs[0], "reset")) {
             parser_reset();
             if (nlhs > 0) plhs[0] = mxCreateDoubleMatrix(0,0,mxREAL);
             return;
         } else {
             mexErrMsgIdAndTxt("mavmc_deserializer_mex:args",
-                              "Nieznane polecenie tekstowe. Użyj 'reset' lub przekaż uint8.");
+                              "Nieznane polecenie tekstowe. Użyj 'reset' albo przekaż uint8.");
         }
     }
 
+    // Normalna ścieżka: oczekujemy wektora uint8 (porcja bajtów)
     if (!mxIsUint8(prhs[0])) {
         mexErrMsgIdAndTxt("mavmc_deserializer_mex:args",
-                          "Wejście musi być wektorem typu uint8 (porcja bajtów).");
+                          "Wejście musi być wektorem typu uint8 (porcja bajtów) albo tekstowym 'reset'.");
     }
 
     const uint8_t* data = (const uint8_t*)mxGetData(prhs[0]);
@@ -175,13 +245,12 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
                     s = make_radio_status_struct(&g_msg);
                     break;
 
-                // --- TU DODASZ SWOJE WIADOMOŚCI ---
-                // case MAVLINK_MSG_ID_DEBUG_FRAME:
-                //     s = make_debug_frame_struct(&g_msg);
-                //     break;
-                // case MAVLINK_MSG_ID_GENERIC_CAN_FRAME:
-                //     s = make_generic_can_frame_struct(&g_msg);
-                //     break;
+                case MAVLINK_MSG_ID_GENERIC_CAN_FRAME:   // 200
+                    s = make_generic_can_frame_struct(&g_msg);
+                    break;
+                case MAVLINK_MSG_ID_DEBUG_FRAME:         // 201
+                    s = make_debug_frame_struct(&g_msg);
+                    break;
 
                 default:
                     s = make_generic_msg_struct(&g_msg);

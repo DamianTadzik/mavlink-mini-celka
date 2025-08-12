@@ -332,9 +332,9 @@
         <!-- Generic CAN frame -->
         <message id="200" name="GENERIC_CAN_FRAME">
             <description>Custom CAN frame message</description>
-            <field type="uint32_t" name="id">CAN frame ID</field>
+            <field type="uint32_t" name="timestamp">CAN frame timestamp</field>
+            <field type="uint16_t" name="id">CAN frame ID</field>
             <field type="uint8_t[8]" name="data">CAN frame payload</field>
-            <field type="uint8_t" name="dlc">Data length code</field>
         </message>
 
         <!-- Debug frame -->
