@@ -7,6 +7,55 @@ catch ME
     send(queue_debug, "Error reseting mex deserializer: " + ME.message);
 end
 
+% ==== TELEMETRIA ====
+TELEMETRY_INTERVAL = 0.5;  % co ile sek. raport
+tele = struct( ...
+    't0', tic, ...
+    'last_report', tic, ...
+    'idle_time', 0.0, ...
+    'busy_time', 0.0, ...
+    'loops', uint64(0), ...
+    'chunks', uint64(0), ...
+    'msgs', uint64(0), ...
+    'raw_appended', uint64(0), ...
+    'dec_appended', uint64(0), ...
+    'flushes', uint64(0), ...
+    't_mex', 0.0, ...
+    't_decode', 0.0, ...
+    't_flush', 0.0);
+
+% helper do wysyłania raportu (string) i zerowania liczników „od ostatniego raportu"
+function telemetry_send()
+    dt = toc(tele.last_report);
+    work = tele.busy_time; idle = tele.idle_time;
+    util = 100.0 * work / max(work+idle, eps);
+    chunks_rate = double(tele.chunks) / max(dt, eps);
+    msgs_rate   = double(tele.msgs)   / max(dt, eps);
+
+    % średnie czasy na iterację (ms)
+    ms_mex    = 1000.0 * tele.t_mex   / max(double(tele.chunks), 1);
+    ms_decode = 1000.0 * tele.t_decode/ max(double(tele.chunks), 1);
+    ms_flush  = 1000.0 * tele.t_flush / max(double(tele.flushes), 1);
+
+    msg = sprintf(['@@telemetry util=%.1f%% chunks=%.1f/s msgs=%.0f/s ', ...
+                   'raw_buf=%u dec_buf=%u flush=%u ', ...
+                   'mex=%.2fms decode=%.2fms flush=%.2fms'],
+                   util, chunks_rate; msgs_rate, ...
+                   uint32(raw_len), uint32(dec_len), uint32(tele.flushes), ...
+                   ms_mex, ms_decode, ms_flush);
+
+    send(queue_debug, msg);
+
+    % wyzeruj liczniki „delta"
+    tele.last_report = tic;
+    tele.idle_time = 0.0; tele.busy_time = 0.0;
+    tele.chunks = uint64(0); tele.msgs = uint64(0);
+    tele.raw_appended = uint64(0); tele.dec_appended = uint64(0);
+    tele.flushes = uint64(0);
+    tele.t_mex = 0.0; tele.t_decode = 0.0; tele.t_flush = 0.0;
+end
+
+
 log_ts = datestr(now,'yyyymmdd_HHMMSS');
 raw_file = fullfile(tempdir, "log_raw_"     + log_ts + ".mat");
 dec_file = fullfile(tempdir, "log_decoded_" + log_ts + ".mat");
@@ -29,55 +78,103 @@ dec.dec_value       = double([]);     % Mx1
 send(queue_debug, "Raw logging to: " + raw_file);
 send(queue_debug, "Decoded logging to: " + dec_file);
 
-% Raw buffers
-raw_timestamp   = uint32([]);
-raw_id          = uint16([]);
-raw_data        = uint8([]);   % Nx8
+% Raw buffers (PREALLOC with capacity-doubling)
+RAW_STEP = 2048; DEC_STEP = 4096;   % dobra startowa pojemność; potem ×2
+raw_cap = RAW_STEP;  dec_cap = DEC_STEP;
 
-% Decoded buffers
-dec_timestamp   = uint32([]);
-dec_frame       = {};
-dec_signal      = {};
-dec_value       = double([]);
+raw_timestamp = zeros(raw_cap,1,'uint32');
+raw_id        = zeros(raw_cap,1,'uint16');
+raw_data      = zeros(raw_cap,8,'uint8');
+raw_len = 0;
 
-log_interval = 2; last_flush = tic;
+dec_timestamp = zeros(dec_cap,1,'uint32');
+dec_frame     = cell(dec_cap,1);
+dec_signal    = cell(dec_cap,1);
+dec_value     = zeros(dec_cap,1,'double');
+dec_len = 0;
 
-function flush_all()
-    try
-        raw_count = size(raw_timestamp, 1);
-        dec_count = size(dec_timestamp, 1);
+log_interval = 1.0; 
+RAW_FLUSH_THRESHOLD = 4096;
+DEC_FLUSH_THRESHOLD = 8192;
+last_flush = tic;
 
-        if raw_count > 0
-            k0 = double(raw.raw_count);
-            n  = size(raw_timestamp,1);
-            raw.raw_timestamp(k0+1:k0+n,1) = raw_timestamp;
-            raw.raw_id(       k0+1:k0+n,1) = raw_id;
-            raw.raw_data(     k0+1:k0+n,1:8) = raw_data;
-            raw.raw_count = uint64(k0 + n);
-            raw_timestamp = uint32([]); raw_id = uint16([]); raw_data = uint8([]);
+% capacity-doubling
+function ensure_raw_capacity(n_add)
+    if raw_len + n_add > raw_cap
+        new_cap = raw_cap;
+        while raw_len + n_add > new_cap
+            new_cap = new_cap * 2;
         end
-        if dec_count > 0
-            k0 = double(dec.dec_count);
-            m  = size(dec_timestamp,1);
-            dec.dec_timestamp(k0+1:k0+m,1) = dec_timestamp;
-            dec.dec_frame(    k0+1:k0+m,1) = dec_frame;
-            dec.dec_signal(   k0+1:k0+m,1) = dec_signal;
-            dec.dec_value(    k0+1:k0+m,1) = dec_value;
-            dec.dec_count = uint64(k0 + m);
-            dec_timestamp = uint32([]); dec_frame = {}; dec_signal = {}; dec_value = double([]);
-        end
-        send(queue_debug, sprintf("flush_all done: %d raw frames and %d decoded signals written", raw_count, dec_count));
-    catch MEf
-        send(queue_debug, "flush_all error: " + MEf.message);
+        % realokacje „na miejscu"
+        raw_timestamp(new_cap,1) = uint32(0);
+        raw_id(new_cap,1)        = uint16(0);
+        raw_data(new_cap,8)      = uint8(0);
+        raw_cap = new_cap;
     end
 end
 
+function ensure_dec_capacity(n_add)
+    if dec_len + n_add > dec_cap
+        new_cap = dec_cap;
+        while dec_len + n_add > new_cap
+            new_cap = new_cap * 2;
+        end
+        dec_timestamp(new_cap,1) = uint32(0);
+        dec_value(new_cap,1)     = double(0);
+        dec_frame{new_cap,1}     = [];
+        dec_signal{new_cap,1}    = [];
+        dec_cap = new_cap;
+    end
+end
+
+function flush_all()
+    tf = tic;
+    try
+        raw_count = raw_len;
+        dec_count = dec_len;
+
+        if raw_count > 0
+            k0 = double(raw.raw_count);
+            raw.raw_timestamp(k0+1:k0+raw_count,1) = raw_timestamp(1:raw_count);
+            raw.raw_id(       k0+1:k0+raw_count,1) = raw_id(1:raw_count);
+            raw.raw_data(     k0+1:k0+raw_count,1:8) = raw_data(1:raw_count,1:8);
+            raw.raw_count = uint64(k0 + raw_count);
+            raw_len = 0;
+        end
+
+        if dec_count > 0
+            k0 = double(dec.dec_count);
+            dec.dec_timestamp(k0+1:k0+dec_count,1) = dec_timestamp(1:dec_count);
+            dec.dec_frame(    k0+1:k0+dec_count,1) = dec_frame(1:dec_count);
+            dec.dec_signal(   k0+1:k0+dec_count,1) = dec_signal(1:dec_count);
+            dec.dec_value(    k0+1:k0+dec_count,1) = dec_value(1:dec_count);
+            dec.dec_count = uint64(k0 + dec_count);
+            dec_len = 0;
+        end
+
+        send(queue_debug, sprintf('@@flush_all done: %d raw frames and %d decoded signals written', raw_count, dec_count));
+    catch MEf
+        send(queue_debug, "flush_all error: " + MEf.message);
+    end
+    tele.t_flush = tele.t_flush + toc(tf);
+    tele.flushes = tele.flushes + 1;
+end
+
 while true
+    t_wait = tic;
     [chunk, ok] = poll(queue_to_worker, 0.05);
+    waited = toc(t_wait);
+    
     if ~ok
+        tele.idle_time = tele.idle_time + waited;
+        tele.loops = tele.loops + 1;
+        % okresowo raportuj nawet gdy nic nie robimy
+        if toc(tele.last_report) >= TELEMETRY_INTERVAL
+            telemetry_send();
+        end
         continue;
     end
-    
+
     if ~isa(chunk,'uint8') && ( ...
         (ischar(chunk)   && strcmp(chunk,'__SHUTDOWN__')) || ...
         (isstring(chunk) && chunk=="__SHUTDOWN__")        || ...
@@ -91,9 +188,14 @@ while true
         return;   % clean exit
     end
 
+    t_busy = tic;
+    tele.chunks = tele.chunks + 1;
     try
+        t_mex = tic;
         msgs = mavmc_deserializer_mex(chunk);
+        tele.t_mex = tele.t_mex + toc(t_mex);
         if ~isempty(msgs)
+            tele.msgs = tele.msgs + uint64(numel(msgs));
             for i = 1:numel(msgs)
                 s = msgs{i};
                 % Dekodowanie CAN (msgid=200) i doklejanie 'decoded' 
@@ -107,14 +209,36 @@ while true
                         msgs{i} = s;
 
                         try
-                            signals = fieldnames(decoded.signals);
-                            for n_of_signals = 1:numel(signals)
-                                signal = signals{n_of_signals};
-                                dec_timestamp(end+1,1) = uint32(s.timestamp);
-                                dec_frame{end+1,1}     = char(decoded.frame);
-                                dec_signal{end+1,1}    = char(signal);
-                                dec_value(end+1,1)     = double(decoded.signals.(signal));
+                            % ===== OPTIMAL BATCH-APPEND DLA DECODED =====
+                            % Wyciągnij listę nazw pól (sygnałów) i odpowiadające wartości RAZ na ramkę
+                            sig_names = fieldnames(decoded.signals);     % 1x na ramkę (konieczne u Ciebie)
+                            sig_vals  = struct2cell(decoded.signals);    % wartości w tej samej kolejności co sig_names
+                            
+                            n_add = numel(sig_names);
+                            tele.dec_appended = tele.dec_appended + uint64(n_add);
+
+                            if n_add > 0
+                                ensure_dec_capacity(n_add);
+
+                                % zakres docelowy w buforze
+                                idx0 = dec_len + 1;
+                                idx1 = dec_len + n_add;
+                            
+                                % stałe dla tej ramki
+                                t    = uint32(s.timestamp);
+                                fstr = decoded.frame;  % nie konwertuj na char, trzymaj bezpośrednio
+                            
+                                % WRZUCAMY HURTEM (bez pętli po 1 elemencie):
+                                dec_timestamp(idx0:idx1, 1) = t;                    % jeden timestamp do całego zakresu
+                                dec_frame(    idx0:idx1, 1) = {fstr};               % powielenie nazwy ramki
+                                dec_signal(   idx0:idx1, 1) = sig_names;            % bez char(), zostaje cellstr
+                                % zamień wartości na double wektorem i wstaw hurtem
+                                dec_value(    idx0:idx1, 1) = cellfun(@double, sig_vals);
+                            
+                                % zaktualizuj długość
+                                dec_len = idx1;
                             end
+
                         catch ME
                             debug(queue_debug, "decoded logging error: ", ME);
                         end
@@ -122,10 +246,13 @@ while true
                         debug(queue_debug, "cmmc_database_decoder error: ", ME);
                     end
      
-                    % RAW zawsze
-                    raw_timestamp(end+1,1)  = uint32(s.timestamp);
-                    raw_id(end+1,1)         = uint16(s.id);
-                    raw_data(end+1,1:8)     = reshape(uint8(s.data),1,8);
+                    ensure_raw_capacity(1);
+                    raw_len = raw_len + 1;
+                    raw_timestamp(raw_len,1) = uint32(s.timestamp);
+                    raw_id(raw_len,1)        = uint16(s.id);
+                    raw_data(raw_len,1:8)    = reshape(uint8(s.data),1,8);
+
+                    tele.raw_appended = tele.raw_appended + uint64(1);
                 end
             end
             % Zwrócenie struktury do gui
@@ -135,9 +262,17 @@ while true
         send(queue_debug, "MEX error: " + ME.message);
     end
 
-    if toc(last_flush) >= log_interval && (~isempty(raw_timestamp) || ~isempty(dec_timestamp))
-         flush_all(); last_flush = tic;
+    % ==== [ADD] stop pomiaru busy + okresowy raport ====
+    tele.busy_time = tele.busy_time + toc(t_busy);
+    
+    if toc(tele.last_report) >= TELEMETRY_INTERVAL
+        telemetry_send();
     end
+
+    if (toc(last_flush) >= log_interval) && (raw_len > 0 || dec_len > 0)
+        flush_all(); last_flush = tic;
+    end
+
 
 end
 end
@@ -219,17 +354,6 @@ end
 %         ADC_RAW: 256                  % Field with value
 %     ADC_VOLTAGE: 3.3686e+04           % Field with value
 
-%% wnioski
-% moj dekoder w mexie jest stworzony pod konkretnego database'a 
-% gdzie w takim razie przechowywac tablice rozkodowanych wartosci i jak sobie z tym efektywnie radzić?
-% Czy rozkodowane wartości dynamicznie mam przechowywać w matalbie czy
-% jakoś je zapisywać? hmmm nie wiem xd na pewno któreś sygnały z magistrali
-% będę czasem chciał plotować ale to po ich nagraniu, offline... ale na
-% żywo też czasami
-%
-% Dobra zapisujemy dane z poziomu workera do matów i essa a na gui bufory
-% kołowe do wyświetlania rameczek i jakieś strukturki do wyboru co
-% wyświetlamy xd a na 
 
 %% Todo numero uno
 % wysłać mavlinka z minicelki na osobnym branchu zeby nie stracic roboty z

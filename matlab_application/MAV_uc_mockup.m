@@ -3,7 +3,7 @@ clear; clc;
 dialect = mavlinkdialect("mavmc.xml", 1);
 mavlink = mavlinkio(dialect);
 
-portName = 'COM18';
+portName = 'COM20';
 baudRate = 115200;
 s = serialport(portName, baudRate);
 
@@ -16,17 +16,17 @@ SYS_ID   = uint8(1);
 COMP_ID  = uint8(1);
 % --- Częstotliwości wysyłek (Hz) ---
 HB_FREQ  = 1;
-DBG_FREQ = 0.2;
-CAN_FREQ = 2;
+DBG_FREQ = 0.01;
+CAN_FREQ = 0.01;
 
 % --- Szablony wiadomości (ustawiane raz) ---
 % HEARTBEAT
 hbMsg = createmsg(dialect, "HEARTBEAT");
-hbMsg.Payload.type           = uint8(0);   % MAV_TYPE_GENERIC
-hbMsg.Payload.autopilot = uint8(8);         % nc MAV_AUTOPILOT_INVALID - 8
-hbMsg.Payload.base_mode = uint8(0);         % nc
-hbMsg.Payload.system_status = uint8(0); % ? MAV_STATE_UNINIT - 0 
-hbMsg.Payload.custom_mode = uint32(0);  % ? 
+hbMsg.Payload.type          = uint8(0);     % MAV_TYPE_GENERIC
+hbMsg.Payload.autopilot     = uint8(8);     % nc MAV_AUTOPILOT_INVALID - 8
+hbMsg.Payload.base_mode     = uint8(0);     % nc
+hbMsg.Payload.system_status = uint8(0);     % ? MAV_STATE_UNINIT - 0 
+hbMsg.Payload.custom_mode   = uint32(0);    % ? 
 % hbMsg.Payload.mavlink_version = uint8(3); % not writable by user
 hbMsg.SystemID   = SYS_ID;
 hbMsg.ComponentID= COMP_ID;
