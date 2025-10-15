@@ -80,7 +80,7 @@ S15:MAX_WINDOW=131
 
 ### Generating Python code
 1. Activate the enviroment ```source venv/Scripts/activate```
-2. Run following command ```mavgen.py --lang=Python3 --output=./mavmc_dialect mavmc.xml```
+2. Run following command ```mavgen.py --lang=Python3 --wire-protocol=1.0 --output=./mavmc_dialect mavmc.xml```
 3. To exit venv ```deactivate```
 
 

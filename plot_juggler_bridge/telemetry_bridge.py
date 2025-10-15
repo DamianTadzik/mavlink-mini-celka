@@ -58,6 +58,7 @@ last_diag_sample = time.time()
 can_fps = 0.0
 loop_time = 0.0
 can_errors_last = 0
+cpu_usage = 0.0
 
 print("[bridge] Running...")
 
@@ -144,13 +145,14 @@ while True:
             elif msg.get_msgId() == 0:  # HEARTBEAT from remote
                 last_remote_heartbeat = time.time()
                 try:
+                    pass
                     # You can record heartbeat info too if you like
-                    latest_signals.update({
-                        "remote_heartbeat/type": msg.type,
-                        "remote_heartbeat/autopilot": msg.autopilot,
-                        "remote_heartbeat/system_status": msg.system_status,
-                        "remote_heartbeat/base_mode": msg.base_mode,
-                    })
+                    # latest_signals.update({
+                    #     "remote_heartbeat/type": msg.type,
+                    #     "remote_heartbeat/autopilot": msg.autopilot,
+                    #     "remote_heartbeat/system_status": msg.system_status,
+                    #     "remote_heartbeat/base_mode": msg.base_mode,
+                    # })
                 except Exception:
                     pass
 

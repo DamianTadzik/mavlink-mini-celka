@@ -3,55 +3,55 @@
  <tabbed_widget parent="main_window" name="Main Window">
   <Tab containers="1" tab_name="Telemetry statistics">
    <Container>
-    <DockSplitter count="2" orientation="-" sizes="0.500577;0.499423">
-     <DockSplitter count="2" orientation="|" sizes="0.5;0.5">
+    <DockSplitter sizes="0.50059;0.49941" orientation="-" count="2">
+     <DockSplitter sizes="0.500368;0.499632" orientation="|" count="2">
       <DockArea name="UART utilisation [%]">
-       <plot flip_x="false" mode="TimeSeries" flip_y="false" style="Lines">
-        <range right="30.213514" bottom="-0.249690" left="11.094690" top="10.237283"/>
+       <plot flip_y="false" mode="TimeSeries" style="Lines" flip_x="false">
+        <range right="18.614898" bottom="-2.531192" top="103.778887" left="0.000000"/>
         <limitY/>
-        <curve name="/fields/uart/util_rx" color="#ff7f0e"/>
-        <curve name="/fields/uart/util_tx" color="#f14cc1"/>
+        <curve color="#1f77b4" name="/fields/uart/util_rx"/>
+        <curve color="#d62728" name="/fields/uart/util_tx"/>
        </plot>
       </DockArea>
-      <DockSplitter count="2" orientation="-" sizes="0.501155;0.498845">
+      <DockSplitter sizes="0.501182;0.498818" orientation="-" count="2">
        <DockArea name="CAN frames per second">
-        <plot flip_x="false" mode="TimeSeries" flip_y="false" style="Lines">
-         <range right="30.213514" bottom="-0.100000" left="11.094690" top="0.100000"/>
+        <plot flip_y="false" mode="TimeSeries" style="Lines" flip_x="false">
+         <range right="18.614898" bottom="66.737874" top="78.216967" left="0.000000"/>
          <limitY/>
-         <curve name="/fields/can/fps" color="#1f77b4"/>
+         <curve color="#f14cc1" name="/fields/can/fps"/>
         </plot>
        </DockArea>
        <DockArea name="CAN decode errors">
-        <plot flip_x="false" mode="TimeSeries" flip_y="false" style="Lines">
-         <range right="30.213514" bottom="-0.100000" left="11.094690" top="0.100000"/>
+        <plot flip_y="false" mode="TimeSeries" style="Lines" flip_x="false">
+         <range right="18.614898" bottom="-0.100000" top="0.100000" left="0.000000"/>
          <limitY/>
-         <curve name="/fields/can/decode_errors_last_sec" color="#bcbd22"/>
+         <curve color="#9467bd" name="/fields/can/decode_errors_last_sec"/>
         </plot>
        </DockArea>
       </DockSplitter>
      </DockSplitter>
-     <DockSplitter count="2" orientation="|" sizes="0.5;0.5">
+     <DockSplitter sizes="0.502575;0.497425" orientation="|" count="2">
       <DockArea name="Telemetry SNR [dB]">
-       <plot flip_x="false" mode="TimeSeries" flip_y="false" style="Lines">
-        <range right="30.213514" bottom="-5.394737" left="11.094690" top="0.131579"/>
+       <plot flip_y="false" mode="TimeSeries" style="Lines" flip_x="false">
+        <range right="18.614898" bottom="25.592105" top="55.986842" left="0.000000"/>
         <limitY/>
-        <curve name="/fields/link/rem_snr" color="#9467bd"/>
-        <curve name="/fields/link/snr" color="#17becf"/>
+        <curve color="#1ac938" name="/fields/link/rem_snr"/>
+        <curve color="#ff7f0e" name="/fields/link/snr"/>
        </plot>
       </DockArea>
-      <DockSplitter count="2" orientation="-" sizes="0.5;0.5">
+      <DockSplitter sizes="0.5;0.5" orientation="-" count="2">
        <DockArea name="Bridge loop time">
-        <plot flip_x="false" mode="TimeSeries" flip_y="false" style="Lines">
-         <range right="30.213514" bottom="14.747733" left="11.094690" top="31.065112"/>
+        <plot flip_y="false" mode="TimeSeries" style="Lines" flip_x="false">
+         <range right="18.614898" bottom="9.555602" top="31.424260" left="0.000000"/>
          <limitY/>
-         <curve name="/fields/bridge/loop_time_ms" color="#1ac938"/>
+         <curve color="#17becf" name="/fields/bridge/loop_time_ms"/>
         </plot>
        </DockArea>
        <DockArea name="Bridge CPU usage">
-        <plot flip_x="false" mode="TimeSeries" flip_y="false" style="Lines">
-         <range right="30.213514" bottom="2.067500" left="11.094690" top="7.632500"/>
+        <plot flip_y="false" mode="TimeSeries" style="Lines" flip_x="false">
+         <range right="18.614898" bottom="2.812500" top="14.887500" left="0.000000"/>
          <limitY/>
-         <curve name="/fields/bridge/cpu_usage" color="#d62728"/>
+         <curve color="#bcbd22" name="/fields/bridge/cpu_usage"/>
         </plot>
        </DockArea>
       </DockSplitter>
@@ -59,33 +59,86 @@
     </DockSplitter>
    </Container>
   </Tab>
-  <Tab containers="1" tab_name="Power">
+  <Tab containers="1" tab_name="Power - Steering and Motor">
    <Container>
-    <DockSplitter count="1" orientation="-" sizes="1">
-     <DockArea name="...">
-      <plot flip_x="false" mode="TimeSeries" flip_y="false" style="Lines">
-       <range right="1.000000" bottom="0.000000" left="0.000000" top="1.000000"/>
+    <DockSplitter sizes="1" orientation="-" count="1">
+     <DockSplitter sizes="0.500368;0.499632" orientation="|" count="2">
+      <DockSplitter sizes="0.334515;0.330969;0.334515" orientation="-" count="3">
+       <DockArea name="...">
+        <plot flip_y="false" mode="TimeSeries" style="Lines" flip_x="false">
+         <range right="18.614898" bottom="-0.100000" top="0.100000" left="0.000000"/>
+         <limitY/>
+         <curve color="#1f77b4" name="/fields/ODRIVE_GET_BUS_VOLTAGE_CURRENT/Bus_Current"/>
+        </plot>
+       </DockArea>
+       <DockArea name="...">
+        <plot flip_y="false" mode="TimeSeries" style="Lines" flip_x="false">
+         <range right="18.614898" bottom="-0.100000" top="0.100000" left="0.000000"/>
+         <limitY/>
+         <curve color="#1f77b4" name="/fields/ODRIVE_GET_BUS_VOLTAGE_CURRENT/Bus_Current"/>
+        </plot>
+       </DockArea>
+       <DockArea name="...">
+        <plot flip_y="false" mode="TimeSeries" style="Lines" flip_x="false">
+         <range right="1.000000" bottom="0.000000" top="1.000000" left="0.000000"/>
+         <limitY/>
+        </plot>
+       </DockArea>
+      </DockSplitter>
+      <DockSplitter sizes="0.333333;0.333333;0.333333" orientation="-" count="3">
+       <DockArea name="...">
+        <plot flip_y="false" mode="TimeSeries" style="Lines" flip_x="false">
+         <range right="18.614898" bottom="-0.100000" top="0.100000" left="0.000000"/>
+         <limitY/>
+         <curve color="#ff7f0e" name="/fields/ACTUATOR_STEERING_FEEDBACK/CURRENT"/>
+        </plot>
+       </DockArea>
+       <DockArea name="...">
+        <plot flip_y="false" mode="TimeSeries" style="Lines" flip_x="false">
+         <range right="18.614898" bottom="6.086000" top="6.286000" left="0.000000"/>
+         <limitY/>
+         <curve color="#f14cc1" name="/fields/ACTUATOR_STEERING_FEEDBACK/VOLTAGE"/>
+        </plot>
+       </DockArea>
+       <DockArea name="...">
+        <plot flip_y="false" mode="TimeSeries" style="Lines" flip_x="false">
+         <range right="1.000000" bottom="0.000000" top="1.000000" left="0.000000"/>
+         <limitY/>
+        </plot>
+       </DockArea>
+      </DockSplitter>
+     </DockSplitter>
+    </DockSplitter>
+   </Container>
+  </Tab>
+  <Tab containers="1" tab_name="Distance sensors">
+   <Container>
+    <DockSplitter sizes="1" orientation="-" count="1">
+     <DockArea name="Distance mm">
+      <plot flip_y="false" mode="TimeSeries" style="Lines" flip_x="false">
+       <range right="18.614898" bottom="56.150000" top="259.850000" left="0.000000"/>
        <limitY/>
+       <curve color="#d62728" name="/fields/DISTANCE_ACHTER_FEEDBACK/RANGE_MM_L"/>
+       <curve color="#1ac938" name="/fields/DISTANCE_ACHTER_FEEDBACK/RANGE_MM_R"/>
       </plot>
      </DockArea>
     </DockSplitter>
    </Container>
   </Tab>
-  <currentTabIndex index="0"/>
+  <currentTabIndex index="2"/>
  </tabbed_widget>
  <use_relative_time_offset enabled="1"/>
  <!-- - - - - - - - - - - - - - - -->
  <!-- - - - - - - - - - - - - - - -->
  <Plugins>
   <plugin ID="DataLoad CSV">
-   <parameters time_axis="" delimiter="0"/>
+   <parameters delimiter="0" time_axis=""/>
   </plugin>
   <plugin ID="DataLoad MCAP"/>
   <plugin ID="DataLoad Parquet">
-   <default radioIndexChecked="0" dateFromat="yyyy-MM-dd hh:mm:ss" parseDateTime="0" prevTimestamp=""/>
+   <default prevTimestamp="" radioIndexChecked="0" dateFromat="yyyy-MM-dd hh:mm:ss" parseDateTime="0"/>
   </plugin>
   <plugin ID="DataLoad ULog"/>
-  <plugin ID="Simple CSV"/>
   <plugin ID="MQTT Subscriber (Mosquitto)"/>
   <plugin ID="UDP Server"/>
   <plugin ID="ZMQ Subscriber"/>
