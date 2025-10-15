@@ -127,6 +127,7 @@ try
                 end
                 % Append decoded can_msg to the mav_msg
                 mav_msg.decoded = can_msg;
+                mav_msg = rmfield(mav_msg, {'id','data'});
                 % Replace the original struct with extended one
                 mav_msgs{i} = mav_msg;
             end 
