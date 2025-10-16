@@ -47,9 +47,10 @@ S15:MAX_WINDOW=131
 ```
 
 ## Requirements
-- Python 3.x
+- Python 3.x (I am using 3.11) 
 - ```requirements.txt```
 - Matlab2025a
+- PlotJuggler (I am using 3.12.2)
 
 
 ### Plot jugger bridge
@@ -95,5 +96,5 @@ S15:MAX_WINDOW=131
 ## Useful resources:
 - [SiK Radio Configuration](https://ardupilot.org/copter/docs/common-3dr-radio-advanced-configuration-and-technical-information.html?utm_source=chatgpt.com)
 - [MAVLink Repository](https://github.com/mavlink/mavlink.git)
-- []()
+- [PlotJuggler webpage](https://plotjuggler.io/)
 - []()
