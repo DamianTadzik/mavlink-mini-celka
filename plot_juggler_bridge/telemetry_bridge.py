@@ -60,172 +60,195 @@ loop_time = 0.0
 can_errors_last = 0
 cpu_usage = 0.0
 
+mav_crc_errors = 0
+last_mav_error_print = 0.0
+
+print(f"[bridge] Serial port : {SERIAL_PORT} @ {BAUDRATE} baud")
+print(f"[bridge] UDP target  : {UDP_ADDR[0]}:{UDP_ADDR[1]}")
+print(f"[bridge] DBC loaded  : {dbc.version or 'unknown version'} ({len(dbc.messages)} messages)")
 print("[bridge] Running...")
 
-while True:
-    # --- Measure loop time ---
-    t_loop_start = time.time()
+try:
+    while True:
+        # --- Measure loop time ---
+        t_loop_start = time.time()
 
-    # --- Recieve bytes from serial port ---
-    chunk = ser.read(4096)
-    if chunk:
-        # Count bytes for diagnostic purposes
-        rx_bytes += len(chunk)
-        for b in chunk:
-            msg = parser.parse_char(bytes([b]))
-            if msg is None:
-                continue
-            last_rx = time.time()
-
-            if msg.get_msgId() == 200:  # GENERIC_CAN_FRAME
-                frame_id = msg.id
-                payload = bytes(msg.data)
+        # --- Recieve bytes from serial port ---
+        chunk = ser.read(4096)
+        if chunk:
+            # Count bytes for diagnostic purposes
+            rx_bytes += len(chunk)
+            for b in chunk:
                 try:
-                    can_msg = dbc.get_message_by_frame_id(frame_id)
-                    decoded = can_msg.decode(payload)
-                    frame_name = can_msg.name
-                    can_frames += 1  # count CAN frames seen
+                    msg = parser.parse_char(bytes([b]))
+                except mavlink.MAVError as e:
+                    # Ignore bad frames, CRC errors, and wrong prefixes
+                    mav_crc_errors += 1
 
-                    # --- handle FLOAT32_IEEE conversions ---
-                    import struct
-                    for signal in can_msg.signals:
-                        unit = signal.unit or ""
-                        if "FLOAT32_IEEE" in unit and signal.name in decoded:
-                            raw_val = decoded[signal.name]
-                            if isinstance(raw_val, int):
-                                try:
-                                    decoded[signal.name] = struct.unpack('<f', raw_val.to_bytes(4, 'little'))[0]
-                                except Exception:
-                                    pass  # ignore malformed float
+                    # Print occasional warning for visibility (every 100 errors or every 5 seconds)
+                    now_err = time.time()
+                    if (mav_crc_errors % 100 == 0) or (now_err - last_mav_error_print > 5.0):
+                        print(f"[warn] MAVLink parser error ({mav_crc_errors} total): {e}")
+                        last_mav_error_print = now_err
 
-                    # --- store decoded signals with frame prefix ---
-                    for sig_name, sig_value in decoded.items():
-                        full_name = f"{frame_name}/{sig_name}"
-                        latest_signals[full_name] = sig_value
+                if msg is None:
+                    continue
+                last_rx = time.time()
 
-                except Exception as e:
-                    can_decode_errors += 1
-                    print(f"[warn] CAN decode failed for ID {frame_id:#04x}: {e}")
+                if msg.get_msgId() == 200:  # GENERIC_CAN_FRAME
+                    frame_id = msg.id
+                    payload = bytes(msg.data)
+                    try:
+                        can_msg = dbc.get_message_by_frame_id(frame_id)
+                        decoded = can_msg.decode(payload)
+                        frame_name = can_msg.name
+                        can_frames += 1  # count CAN frames seen
 
-            elif msg.get_msgId() == 109: # RADIO_STATUS
-                # Convert raw telemetry to dBm and compute SNRs
-                try:
-                    # scale and offset identical to MATLAB
-                    rssi      = (msg.rssi     / 1.9) - 127.0
-                    remrssi   = (msg.remrssi  / 1.9) - 127.0
-                    noise     = (msg.noise    / 1.9) - 127.0
-                    remnoise  = (msg.remnoise / 1.9) - 127.0
+                        # --- handle FLOAT32_IEEE conversions ---
+                        import struct
+                        for signal in can_msg.signals:
+                            unit = signal.unit or ""
+                            if "FLOAT32_IEEE" in unit and signal.name in decoded:
+                                raw_val = decoded[signal.name]
+                                if isinstance(raw_val, int):
+                                    try:
+                                        decoded[signal.name] = struct.unpack('<f', raw_val.to_bytes(4, 'little'))[0]
+                                    except Exception:
+                                        pass  # ignore malformed float
 
-                    txbuf     = float(msg.txbuf)
-                    rxerrors  = float(msg.rxerrors)
-                    fixed     = float(msg.fixed)
+                        # --- store decoded signals with frame prefix ---
+                        for sig_name, sig_value in decoded.items():
+                            full_name = f"{frame_name}/{sig_name}"
+                            latest_signals[full_name] = sig_value
 
-                    # Compute SNRs
-                    snr      = rssi - noise     if not (rssi is None or noise is None) else float('nan')
-                    rem_snr  = remrssi - remnoise if not (remrssi is None or remnoise is None) else float('nan')
+                    except Exception as e:
+                        can_decode_errors += 1
+                        print(f"[warn] CAN decode failed for ID {frame_id:#04x}: {e}")
 
-                    # Feed to PlotJuggler-friendly structure
-                    latest_signals.update({
-                        "link/rssi":      rssi,
-                        "link/remrssi":   remrssi,
-                        "link/noise":     noise,
-                        "link/remnoise":  remnoise,
-                        "link/snr":       snr,
-                        "link/rem_snr":   rem_snr,
-                        "link/txbuf":     txbuf,
-                        "link/rxerrors":  rxerrors,
-                        "link/fixed":     fixed
-                    })
+                elif msg.get_msgId() == 109: # RADIO_STATUS
+                    # Convert raw telemetry to dBm and compute SNRs
+                    try:
+                        # scale and offset identical to MATLAB
+                        rssi      = (msg.rssi     / 1.9) - 127.0
+                        remrssi   = (msg.remrssi  / 1.9) - 127.0
+                        noise     = (msg.noise    / 1.9) - 127.0
+                        remnoise  = (msg.remnoise / 1.9) - 127.0
 
-                except Exception as e:
-                    # keep bridge alive even if unexpected field missing
-                    print(f"[warn] RADIO_STATUS decode failed: {e}")
+                        txbuf     = float(msg.txbuf)
+                        rxerrors  = float(msg.rxerrors)
+                        fixed     = float(msg.fixed)
+
+                        # Compute SNRs
+                        snr      = rssi - noise     if not (rssi is None or noise is None) else float('nan')
+                        rem_snr  = remrssi - remnoise if not (remrssi is None or remnoise is None) else float('nan')
+
+                        # Feed to PlotJuggler-friendly structure
+                        latest_signals.update({
+                            "link/rssi":      rssi,
+                            "link/remrssi":   remrssi,
+                            "link/noise":     noise,
+                            "link/remnoise":  remnoise,
+                            "link/snr":       snr,
+                            "link/rem_snr":   rem_snr,
+                            "link/txbuf":     txbuf,
+                            "link/rxerrors":  rxerrors,
+                            "link/fixed":     fixed
+                        })
+
+                    except Exception as e:
+                        # keep bridge alive even if unexpected field missing
+                        print(f"[warn] RADIO_STATUS decode failed: {e}")
+                        pass
+
+                elif msg.get_msgId() == 0:  # HEARTBEAT from remote
+                    last_remote_heartbeat = time.time()
+                    try:
+                        pass
+                        # You can record heartbeat info too if you like
+                        # latest_signals.update({
+                        #     "remote_heartbeat/type": msg.type,
+                        #     "remote_heartbeat/autopilot": msg.autopilot,
+                        #     "remote_heartbeat/system_status": msg.system_status,
+                        #     "remote_heartbeat/base_mode": msg.base_mode,
+                        # })
+                    except Exception:
+                        pass
+
+                elif msg.get_msgId() == 201: # DEBUG_FRAME
                     pass
 
-            elif msg.get_msgId() == 0:  # HEARTBEAT from remote
-                last_remote_heartbeat = time.time()
-                try:
-                    pass
-                    # You can record heartbeat info too if you like
-                    # latest_signals.update({
-                    #     "remote_heartbeat/type": msg.type,
-                    #     "remote_heartbeat/autopilot": msg.autopilot,
-                    #     "remote_heartbeat/system_status": msg.system_status,
-                    #     "remote_heartbeat/base_mode": msg.base_mode,
-                    # })
-                except Exception:
-                    pass
+        # --- Heartbeat send ---
+        now = t_loop_start
+        if now - last_heartbeat >= heartbeat_period:
+            hb = sender.heartbeat_encode(
+                type=6,
+                autopilot=8,
+                base_mode=0,
+                custom_mode=0,
+                system_status=0
+            )
+            # Pack manually to capture raw bytes
+            payload = hb.pack(sender)
+            ser.write(payload)          # actually send
+            tx_bytes += len(payload)    # count bytes sent
+            last_heartbeat = now
 
-            elif msg.get_msgId() == 201: # DEBUG_FRAME
-                pass
+        # --- Diagnostics: compute FPS, CPU, loop time ---
+        dt_diag = now - last_diag_sample
+        if dt_diag >= 1.0:
+            can_fps = can_frames / dt_diag
+            can_errors_last = can_decode_errors  # surowy licznik z ostatniej sekundy
 
-    # --- Heartbeat send ---
-    now = t_loop_start
-    if now - last_heartbeat >= heartbeat_period:
-        hb = sender.heartbeat_encode(
-            type=6,
-            autopilot=8,
-            base_mode=0,
-            custom_mode=0,
-            system_status=0
-        )
-        # Pack manually to capture raw bytes
-        payload = hb.pack(sender)
-        ser.write(payload)          # actually send
-        tx_bytes += len(payload)    # count bytes sent
-        last_heartbeat = now
+            # reset liczników
+            can_frames = 0
+            can_decode_errors = 0
 
-    # --- Diagnostics: compute FPS, CPU, loop time ---
-    dt_diag = now - last_diag_sample
-    if dt_diag >= 1.0:
-        can_fps = can_frames / dt_diag
-        can_errors_last = can_decode_errors  # surowy licznik z ostatniej sekundy
-
-        # reset liczników
-        can_frames = 0
-        can_decode_errors = 0
-
-        cpu_usage = psutil.cpu_percent(interval=None)
-        last_diag_sample = now
+            cpu_usage = psutil.cpu_percent(interval=None)
+            last_diag_sample = now
 
 
-    # --- Link & UART telemetry + UDP send ---
-    link_alive = (now - last_remote_heartbeat) < 2.0
+        # --- Link & UART telemetry + UDP send ---
+        link_alive = (now - last_remote_heartbeat) < 2.0
 
-    # update UART throughput once per SEND_PERIOD
-    dt_uart = now - last_uart_sample
-    if dt_uart > 0:
-        uart_rx_speed = rx_bytes / dt_uart
-        uart_tx_speed = tx_bytes / dt_uart
-        rx_bytes = 0
-        tx_bytes = 0
-        last_uart_sample = now
+        # update UART throughput once per SEND_PERIOD
+        dt_uart = now - last_uart_sample
+        if dt_uart > 0:
+            uart_rx_speed = rx_bytes / dt_uart
+            uart_tx_speed = tx_bytes / dt_uart
+            rx_bytes = 0
+            tx_bytes = 0
+            last_uart_sample = now
 
-    uart_util_rx = (uart_rx_speed * 10 / ser.baudrate) * 100.0
-    uart_util_tx = (uart_tx_speed * 10 / ser.baudrate) * 100.0
+        uart_util_rx = (uart_rx_speed * 10 / ser.baudrate) * 100.0
+        uart_util_tx = (uart_tx_speed * 10 / ser.baudrate) * 100.0
 
-    # --- Send --- 
-    if now - last_send >= SEND_PERIOD and latest_signals:
-        loop_time = (time.time() - t_loop_start) * 1000.0  # ms
+        # --- Send --- 
+        if now - last_send >= SEND_PERIOD and latest_signals:
+            loop_time = (time.time() - t_loop_start) * 1000.0  # ms
 
-        latest_signals.update({
-            "link/alive": 1.0 if link_alive else 0.0,
-            "link/latency": now - last_rx,
+            latest_signals.update({
+                "link/alive": 1.0 if link_alive else 0.0,
+                "link/latency": now - last_rx,
 
-            # UART stats
-            "uart/rx_speed": uart_rx_speed,
-            "uart/tx_speed": uart_tx_speed,
-            "uart/util_rx": uart_util_rx,
-            "uart/util_tx": uart_util_tx,
+                # UART stats
+                "uart/rx_speed": uart_rx_speed,
+                "uart/tx_speed": uart_tx_speed,
+                "uart/util_rx": uart_util_rx,
+                "uart/util_tx": uart_util_tx,
 
-            # New diagnostics
-            "can/fps": can_fps,
-            "can/decode_errors_last_sec": can_errors_last,
-            "bridge/cpu_usage": cpu_usage,
-            "bridge/loop_time_ms": loop_time
-        })
+                # New diagnostics
+                "can/fps": can_fps,
+                "can/decode_errors_last_sec": can_errors_last,
+                "bridge/cpu_usage": cpu_usage,
+                "bridge/loop_time_ms": loop_time
+            })
 
-        packet = msgpack.packb({"timestamp": now, "fields": latest_signals})
-        sock.sendto(packet, UDP_ADDR)
-        latest_signals.clear()
-        last_send = now
+            packet = msgpack.packb({"timestamp": now, "fields": latest_signals})
+            sock.sendto(packet, UDP_ADDR)
+            latest_signals.clear()
+            last_send = now
+except KeyboardInterrupt:
+    print("\n[bridge] Interrupted by user, closing ports.")
+    ser.close()
+    sock.close()
+    print("[bridge] Clean exit.")

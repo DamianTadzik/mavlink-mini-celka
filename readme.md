@@ -84,7 +84,6 @@ S15:MAX_WINDOW=131
 2. Run following command ```mavgen.py --lang=Python3 --wire-protocol=1.0 --output=./mavmc_dialect mavmc.xml```
 3. To exit venv ```deactivate```
 
-
 ### DEPRECATED ~~MEX function~~
 - ~~It is written to deserialize data into messages, and it is compiled from its source code ```mavmv_deserializer_mex.c``` and from ```generated/``` directory.~~
 - ~~Compiled using ```mex mavmc_deserializer_mex.c```~~
