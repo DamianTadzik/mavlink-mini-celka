@@ -78,10 +78,14 @@ def analyze_frames(can_frames, dbc_path=None):
 
         if len(ts_list) < 2:
             mean_p = std_p = freq = jitter = np.nan
+            collisions = 0
         else:
-            deltas = np.diff(np.array(ts_list, dtype="datetime64[ns]")).astype("timedelta64[ms]").astype(float)
-            mean_p = np.mean(deltas)
-            std_p = np.std(deltas)
+            ts_ns = np.array(ts_list, dtype="datetime64[ms]")
+            deltas = np.diff(ts_ns).astype(float)
+            # Detect same-timestamp collisions (0 ms delta)
+            collisions = int(np.sum(deltas == 0.0))
+            mean_p = np.mean(deltas[deltas > 0]) if np.any(deltas > 0) else np.nan
+            std_p = np.std(deltas[deltas > 0]) if np.any(deltas > 0) else np.nan
             jitter = (std_p / mean_p) * 100 if mean_p > 0 else np.nan
             freq = 1000.0 / mean_p if mean_p > 0 else np.nan
 
@@ -93,6 +97,7 @@ def analyze_frames(can_frames, dbc_path=None):
             "Std_ms": round(std_p, 3) if not np.isnan(std_p) else None,
             "Jitter_%": round(jitter, 2) if not np.isnan(jitter) else None,
             "Freq_Hz": round(freq, 3) if not np.isnan(freq) else None,
+            "Timestamp_collisions": collisions,
         })
     return pd.DataFrame(results)
 
