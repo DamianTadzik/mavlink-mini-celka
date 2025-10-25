@@ -12,6 +12,7 @@ python plot_juggler_parser/logs_parser.py \
 """
 
 import os
+import re
 import sys
 import argparse
 import datetime
@@ -19,6 +20,7 @@ import struct
 from typing import Set
 import cantools
 import pandas as pd
+import numpy as np
 
 
 # ========== Helper functions ==========
@@ -34,13 +36,14 @@ def is_valid_hex(s: str) -> bool:
     valid_chars = set("0123456789ABCDEFabcdef")
     return all(c in valid_chars for c in s)
 
+timestamp_pattern = re.compile(r"^\d{2}:\d{2}:\d{2},\d{3}$")  # strict HH:MM:SS,mmm format
 
 # ========== NKPL core ==========
 
 class NKPL:
     """
     NKPL — Niezły Kurczę Parser Logów :)
-    Decodes Celka TXT logs to structured data.
+    Decodes TXT logs to structured data.
     """
 
     def __init__(self):
@@ -88,16 +91,34 @@ class NKPL:
 
                 timestamp_str, id_str, payload_str = spl
 
+
+                # Validate timestamp strictly
+                if not timestamp_pattern.match(timestamp_str):
+                    self.handle_corrupted_line(line, "Bad timestamp format")
+                    continue
+
                 # Validate timestamp
                 try:
                     timestamp = datetime.datetime.strptime(timestamp_str, '%H:%M:%S,%f')
+
+                    # Initialize tracking
+                    if not hasattr(self, "_first_timestamp"):
+                        self._first_timestamp = timestamp
+                        self._last_timestamp = timestamp
+                    else:
+                        # If time goes backward → corrupted line, skip it
+                        if timestamp < self._last_timestamp:
+                            self.handle_corrupted_line(line, "Timestamp jump backwards")
+                            continue
+                        self._last_timestamp = timestamp
+
                 except Exception:
                     self.handle_corrupted_line(line, "Bad timestamp")
                     continue
 
                 # Validate ID
-                if not is_valid_hex(id_str):
-                    self.handle_corrupted_line(line, "Bad ID hex")
+                if not (len(id_str) == 2 and is_valid_hex(id_str)):
+                    self.handle_corrupted_line(line, "Bad ID format")
                     continue
                 try:
                     can_id = int(id_str, 16)
@@ -106,8 +127,8 @@ class NKPL:
                     continue
 
                 # Validate payload
-                if not is_valid_hex(payload_str) or len(payload_str) % 2 != 0:
-                    self.handle_corrupted_line(line, "Bad payload hex")
+                if not (len(payload_str) == 16 and is_valid_hex(payload_str)):
+                    self.handle_corrupted_line(line, "Bad payload length/format")
                     continue
                 try:
                     payload = bytes.fromhex(payload_str)
@@ -153,13 +174,10 @@ class NKPL:
                 self.decoded_messages_counter += 1
 
 
-        # Compute timespan
-        if self.database:
-            all_ts = [ts for d in self.database.values() for ts in d['timestamps']]
-            self.min_dt = min(all_ts)
-            self.max_dt = max(all_ts)
-        else:
-            self.min_dt = self.max_dt = None
+        # Compute timespan directly from first and last valid log timestamps
+        self.min_dt = getattr(self, "_first_timestamp", None)
+        self.max_dt = getattr(self, "_last_timestamp", None)
+
 
         print(f"[decode] Done. {self.line_counter} lines, "
               f"{self.corrupted_line_counter} corrupted, "
@@ -185,64 +203,85 @@ class NKPL:
         print(f"[stats] Decoded messages: {self.decoded_messages_counter}")
         if self.min_dt and self.max_dt:
             span = self.max_dt - self.min_dt
-            print(f"[stats] Timespan: {self.min_dt.strftime('%H:%M:%S.%f')[:-3]} → "
-                  f"{self.max_dt.strftime('%H:%M:%S.%f')[:-3]} ({span})")
+            print(f"[stats] Timespan from: {self.min_dt.strftime('%H:%M:%S.%f')[:-3]} to: "
+                  f"{self.max_dt.strftime('%H:%M:%S.%f')[:-3]} duration: {span}")
 
-    # ------------------------------------
+    # -----------------------------------
     def to_dataframe(self) -> pd.DataFrame:
-        """Convert database to pandas DataFrame (wide format)."""
+        """Convert database to pandas DataFrame (wide format, time-aligned)."""
         if not self.database:
             print("[warn] No decoded data to export.")
             return pd.DataFrame()
 
-        frames = []
+        # Flatten all timestamp/signal/value triplets
+        records = []
         for name, rec in self.database.items():
-            ts = pd.to_datetime(rec['timestamps'])
-            vals = rec['values']
-            df_part = pd.DataFrame({"timestamp": ts, name: vals})
-            frames.append(df_part)
+            for ts, val in zip(rec["timestamps"], rec["values"]):
+                records.append((ts, name, val))
 
-        # Merge without forcing unique timestamps
-        df = pd.concat(frames, axis=1)
-        df = df.loc[:, ~df.columns.duplicated()]  # drop accidental duplicate column names
-
-        # Ensure timestamps are sorted and numeric
+        df = pd.DataFrame(records, columns=["timestamp", "signal", "value"])
         df.sort_values("timestamp", inplace=True, ignore_index=True)
 
+        # Detect duplicate (timestamp, signal) pairs
+        dup_counts = df.groupby(["timestamp", "signal"]).size()
+        dup_counts = dup_counts[dup_counts > 1]
+        if not dup_counts.empty:
+            print(f"[warn] {len(dup_counts)} duplicate signal-timestamp pairs found.")
+            # print(dup_counts.head(10))
+            print("[info] Keeping last occurrence for duplicates.")
+
+        # Pivot to wide format, resolving duplicates with 'last'
+        df_wide = df.pivot_table(
+            index="timestamp",
+            columns="signal",
+            values="value",
+            aggfunc="last"
+        )
+
         # Convert timestamp → seconds since start
-        t0 = df["timestamp"].iloc[0]
-        df["time_s"] = (df["timestamp"] - t0).dt.total_seconds()
+        t0 = df_wide.index[0]
+        df_wide.insert(0, "seconds_since_start", (df_wide.index - t0).total_seconds().astype("float64"))
 
-        # Reorder columns so time_s is first
-        cols = ["time_s"] + [c for c in df.columns if c not in ["time_s", "timestamp"]]
-        df = df[cols]
+        df_wide.reset_index(drop=True, inplace=True)
 
-        print(f"[dataframe] Created DataFrame with shape {df.shape}")
-        return df
-
+        print(f"[dataframe] Created DataFrame with shape {df_wide.shape}")
+        return df_wide
 
     # ------------------------------------
-    def export_parquet(self, df: pd.DataFrame, output_path: str, dbc_path: str):
+    def export_parquet(self, df: pd.DataFrame, output_path: str, dbc_path: str, input_path: str = None):
         if df.empty:
             print("[warn] Empty DataFrame — skipping save.")
             return
-        # Optional: attach metadata to Parquet file
+
+        # Gather file metadata if available
+        if input_path and os.path.exists(input_path):
+            ctime = datetime.datetime.fromtimestamp(os.path.getctime(input_path)).isoformat(sep=" ", timespec="seconds")
+            mtime = datetime.datetime.fromtimestamp(os.path.getmtime(input_path)).isoformat(sep=" ", timespec="seconds")
+        else:
+            ctime = mtime = ""
+
+        # Attach metadata to Parquet file
         meta = {
-            "source_log": os.path.basename(output_path),
-            "dbc_file": os.path.basename(dbc_path) if 'dbc_path' in locals() else "unknown",
-            "frames_decoded": str(self.decoded_messages_counter),
-            "start_time": self.min_dt.isoformat() if self.min_dt else "",
-            "end_time": self.max_dt.isoformat() if self.max_dt else "",
-            "duration_s": str((self.max_dt - self.min_dt).total_seconds()) if self.min_dt and self.max_dt else "",
+            "source_raw_log": os.path.basename(input_path) if input_path else "unknown",
+            "source_raw_log_created": ctime,
+            "source_raw_log_modified": mtime,
+            "decoded_with_dbc_file": os.path.basename(dbc_path) if dbc_path else "unknown",
+            "number_of_frames_decoded": str(self.decoded_messages_counter),
+            "raw_log_start_time": self.min_dt.isoformat(sep=' ') if self.min_dt else "",
+            "raw_log_end_time": self.max_dt.isoformat(sep=' ') if self.max_dt else "",
+            "raw_log_duration": str((self.max_dt - self.min_dt).total_seconds()) if self.min_dt and self.max_dt else "",
         }
+
         df.attrs.update(meta)
         df.to_parquet(output_path, compression="zstd")
+
         print(f"[ok] Parquet saved: {output_path} ({human_readable_size(os.path.getsize(output_path))})")
+        print(f"[meta] Source file created: {ctime}")
+        print(f"[meta] Source file modified: {mtime}")
 
 
 # ========== CLI entrypoint ==========
-
-def main():
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Decode Celka TXT logs into Parquet for PlotJuggler")
     parser.add_argument("--dbc", required=True, help="Path to .dbc file")
     parser.add_argument("--input", required=True, help="Path to .txt log file")
@@ -257,9 +296,5 @@ def main():
 
     nkpl.parse_and_decode(args.dbc, args.input, PRINT_ADDITIONAL_INFO=args.verbose)
     df = nkpl.to_dataframe()
-    nkpl.export_parquet(df, args.output, args.dbc)
+    nkpl.export_parquet(df, args.output, args.dbc, args.input)
     print(f"[done] Parsed '{args.input}' → '{args.output}' successfully.")
-
-
-if __name__ == "__main__":
-    main()
