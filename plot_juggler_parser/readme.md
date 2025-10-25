@@ -26,8 +26,13 @@ python plot_juggler_parser/parquet_cutter.py \
 
 5. Ewentualnie analizuj częstość ramek CAN
 
+python plot_juggler_parser/analyze_logs.py \
+--dbc D:/Dane/workspace/can-messages-mini-celka/can_messages_mini_celka.dbc \
+--input D:/Dane/workspace/logs-mini-celka/logs_storage/zakrzowek_2025_10_23/raw_logs/LOG002.TXT \
+--verbose
+
 6.  Import to PJ with select colum as a timestamp
 
 # TODO 
 - cutter start end time might be optional? then it would be needed as a prompt
-- 
+- description md file auto creation with cutter?
