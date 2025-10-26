@@ -10,16 +10,24 @@ import time
 import mavmc_dialect as mavlink
 from pymavlink import mavutil
 import cantools
-import psutil  # add near the top with other imports
+import psutil 
+import argparse
 
 
 # === CONFIG ===
-SERIAL_PORT = "COM17"
+parser = argparse.ArgumentParser(description="Telemetry bridge: UART → MAVLink → CAN decode → UDP")
+parser.add_argument("--dbc", required=True, help="Path to DBC file")
+parser.add_argument("--serial-port", default="COM17", help="Serial port (default: COM17)")
+
+args = parser.parse_args()
+
+SERIAL_PORT = args.serial_port
 BAUDRATE = 115200
 UDP_ADDR = ("127.0.0.1", 9870)
 SEND_PERIOD = 0.1
-DBC_PATH = r"D:\Dane\workspace\can-messages-mini-celka\can_messages_mini_celka.dbc"
+DBC_PATH = args.dbc
 # ==============
+
 
 dbc = cantools.database.load_file(DBC_PATH)
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

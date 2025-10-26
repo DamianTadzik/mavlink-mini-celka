@@ -56,7 +56,7 @@ S15:MAX_WINDOW=131
 ### Plot jugger bridge
 1. Start the plot juggler
 2. Run the venv
-3. run the ```plot_juggler_bridge/telemetry_bridge.py```
+3. run the ```python plot_juggler_bridge/telemetry_bridge.py```
 4. Connect the UDP server with plotjuggler sth
 
 ### First ever launch of python enviroment:
