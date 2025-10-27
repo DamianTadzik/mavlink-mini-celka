@@ -56,6 +56,19 @@ def copy_logs(src: Path, dest: Path) -> int:
             continue
 
         dst_file = dest / file.name
+
+        if dst_file.exists():
+            ans = input(f"File '{file.name}' already exists. [o]verwrite / [s]kip / [r]ename? ").strip().lower()
+            if ans == "s":
+                print("\tSkipped.")
+                continue
+            elif ans == "r":
+                new_name = input("\tEnter new filename: ").strip()
+                if not new_name:
+                    print("\tInvalid name, skipping.")
+                    continue
+                dst_file = dest / new_name
+
         shutil.copy2(file, dst_file)
         count += 1
 
