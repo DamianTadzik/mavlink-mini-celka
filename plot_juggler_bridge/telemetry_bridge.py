@@ -87,6 +87,7 @@ try:
             # Count bytes for diagnostic purposes
             rx_bytes += len(chunk)
             for b in chunk:
+                msg = None
                 try:
                     msg = parser.parse_char(bytes([b]))
                 except mavlink.MAVError as e:
